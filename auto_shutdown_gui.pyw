@@ -36,8 +36,8 @@ class GlassWidget(QWidget):
         
         # Fondo negro muy sutil
         gradient = QLinearGradient(0, 0, 0, rect.height())
-        gradient.setColorAt(0, QColor(0, 0, 0, 120))     # Más opaco arriba
-        gradient.setColorAt(1, QColor(10, 10, 10, 100))  # Más opaco abajo
+        gradient.setColorAt(0, QColor(0, 0, 0, 255))     # NEGRO TOTAL arriba
+        gradient.setColorAt(1, QColor(0, 0, 0, 255))
         
         # Crear path con bordes redondeados
         path = QPainterPath()
