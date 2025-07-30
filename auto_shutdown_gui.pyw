@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Auto Shutdown GUI - Glassmorphism Design
+Auto Shutdown GUI - Google Material Design
 Programa elegante para programar apagado automático con interfaz moderna
 """
-
 import sys
 import json
 import os
@@ -16,40 +15,202 @@ from pathlib import Path
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QLabel, QTimeEdit, QPushButton, 
                             QCheckBox, QFrame, QSystemTrayIcon, QMenu, 
-                            QMessageBox, QSpacerItem, QSizePolicy)
+                            QMessageBox, QSpacerItem, QSizePolicy, QGraphicsDropShadowEffect)
 from PyQt6.QtCore import QTime, QTimer, Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, QRectF
-from PyQt6.QtGui import QFont, QIcon, QPainter, QPainterPath, QColor, QLinearGradient, QBrush
+from PyQt6.QtGui import QFont, QIcon, QPainter, QPainterPath, QColor, QLinearGradient, QBrush, QRadialGradient
 
-class GlassWidget(QWidget):
-    """Widget con efecto glassmorphism"""
+class MaterialCard(QWidget):
+    """Widget tipo Material Design Card"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background: transparent;")
         
+        # Agregar sombra
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setXOffset(0)
+        shadow.setYOffset(5)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)
+        
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
-        # Crear el fondo con glassmorphism NEGRO sutil
         rect = self.rect()
         
-        # Fondo negro muy sutil
+        # Fondo blanco con transparencia para Material Design
         gradient = QLinearGradient(0, 0, 0, rect.height())
-        gradient.setColorAt(0, QColor(0, 0, 0, 255))     # NEGRO TOTAL arriba
-        gradient.setColorAt(1, QColor(0, 0, 0, 255))
+        gradient.setColorAt(0, QColor(255, 255, 255, 250))
+        gradient.setColorAt(1, QColor(248, 249, 250, 245))
         
-        # Crear path con bordes redondeados
+        # Crear path con bordes redondeados estilo Material
         path = QPainterPath()
         rectf = QRectF(rect)
-        path.addRoundedRect(rectf, 20.0, 20.0)
+        path.addRoundedRect(rectf, 16.0, 16.0)
         
         # Aplicar el fondo
         painter.fillPath(path, QBrush(gradient))
         
-        # Borde blanco sutil
-        painter.setPen(QColor(255, 255, 255, 40))
+        # Borde sutil
+        painter.setPen(QColor(224, 224, 224, 100))
         painter.drawPath(path)
+
+class StatusIndicator(QWidget):
+    """Indicador de estado visual estilo Google"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.is_active = True
+        self.status_text = "Activo"
+        self.time_text = "20:00"
+        self.setFixedHeight(80)
+        
+    def set_status(self, active, status_text, time_text):
+        """Actualiza el estado y redibuja"""
+        self.is_active = active
+        self.status_text = status_text
+        self.time_text = time_text
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        rect = self.rect()
+        
+        # Color de fondo según estado
+        if self.is_active:
+            bg_color = QColor(76, 175, 80, 30)  # Verde Material
+            border_color = QColor(76, 175, 80, 150)
+            text_color = QColor(56, 142, 60)
+        else:
+            bg_color = QColor(158, 158, 158, 30)  # Gris Material
+            border_color = QColor(158, 158, 158, 150)
+            text_color = QColor(97, 97, 97)
+        
+        # Fondo
+        path = QPainterPath()
+        rectf = QRectF(rect)
+        path.addRoundedRect(rectf, 12.0, 12.0)
+        painter.fillPath(path, QBrush(bg_color))
+        
+        # Borde
+        painter.setPen(border_color)
+        painter.drawPath(path)
+        
+        # Círculo indicador
+        circle_x = 20
+        circle_y = rect.height() // 2
+        painter.setBrush(QBrush(border_color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(circle_x - 6, circle_y - 6, 12, 12)
+        
+        # Texto de estado
+        painter.setPen(text_color)
+        font = QFont("Segoe UI", 14, QFont.Weight.Bold)
+        painter.setFont(font)
+        painter.drawText(45, circle_y - 8, self.status_text)
+        
+        # Texto de hora (más pequeño)
+        if self.is_active:
+            font = QFont("Segoe UI", 11)
+            painter.setFont(font)
+            painter.setPen(QColor(97, 97, 97))
+            painter.drawText(45, circle_y + 10, f"Apagado programado: {self.time_text}")
+
+class MaterialTimeEdit(QWidget):
+    """Selector de tiempo estilo Material Design"""
+    
+    timeChanged = pyqtSignal(QTime)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_time = QTime(20, 0)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        
+        # Frame contenedor
+        self.time_frame = QFrame()
+        self.time_frame.setStyleSheet("""
+            QFrame {
+                background: white;
+                border: 2px solid #e0e0e0;
+                border-radius: 12px;
+                padding: 15px;
+            }
+            QFrame:focus-within {
+                border: 2px solid #4CAF50;
+            }
+        """)
+        
+        frame_layout = QHBoxLayout(self.time_frame)
+        frame_layout.setSpacing(15)
+        
+        # Selector de hora
+        self.hour_edit = QTimeEdit()
+        self.hour_edit.setTime(self.current_time)
+        self.hour_edit.setDisplayFormat("hh:mm")
+        self.hour_edit.setButtonSymbols(QTimeEdit.ButtonSymbols.UpDownArrows)
+        self.hour_edit.timeChanged.connect(self.on_time_changed)
+        
+        self.hour_edit.setStyleSheet("""
+            QTimeEdit {
+                background: transparent;
+                border: none;
+                color: #2e2e2e;
+                font-size: 24px;
+                font-weight: 600;
+                font-family: 'Segoe UI', Arial;
+                padding: 5px 10px;
+                min-width: 120px;
+            }
+            QTimeEdit::up-button {
+                background: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                width: 25px;
+                margin: 2px;
+            }
+            QTimeEdit::down-button {
+                background: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                width: 25px;
+                margin: 2px;
+            }
+            QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {
+                background: #4CAF50;
+                border-color: #4CAF50;
+            }
+            QTimeEdit::up-arrow {
+                width: 12px;
+                height: 12px;
+            }
+            QTimeEdit::down-arrow {
+                width: 12px;
+                height: 12px;
+            }
+        """)
+        
+        frame_layout.addWidget(self.hour_edit)
+        layout.addWidget(self.time_frame)
+        
+    def on_time_changed(self, time):
+        self.current_time = time
+        self.timeChanged.emit(time)
+        
+    def time(self):
+        return self.current_time
+        
+    def setTime(self, time):
+        self.current_time = time
+        self.hour_edit.setTime(time)
 
 class AutoShutdownService(QThread):
     """Servicio que verifica la hora de apagado en segundo plano"""
@@ -71,7 +232,8 @@ class AutoShutdownService(QThread):
             "enabled": True,
             "shutdown_time": "20:00",
             "postpone_until": None,
-            "skip_today": False
+            "skip_today": False,
+            "last_updated": datetime.datetime.now().isoformat()
         }
         
         try:
@@ -84,15 +246,19 @@ class AutoShutdownService(QThread):
                         config[key] = default_config[key]
                 return config
             else:
+                self.save_config(default_config)
                 return default_config
-        except:
+        except Exception as e:
+            self.log(f"Error cargando configuración: {e}")
             return default_config
     
     def save_config(self, config):
         """Guarda la configuración en archivo"""
         try:
+            config["last_updated"] = datetime.datetime.now().isoformat()
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
+            self.log("Configuración guardada exitosamente")
         except Exception as e:
             self.log(f"Error guardando configuración: {e}")
     
@@ -186,8 +352,8 @@ class AutoShutdownService(QThread):
                 else:
                     self.status_changed.emit("Desactivado")
                 
-                # Esperar 5 minutos antes de la siguiente verificación
-                for _ in range(300):  # 5 minutos = 300 segundos
+                # Esperar 30 segundos antes de la siguiente verificación (más responsivo)
+                for _ in range(30):
                     if not self.running:
                         break
                     time.sleep(1)
@@ -203,7 +369,7 @@ class AutoShutdownService(QThread):
         self.wait()
 
 class AutoShutdownGUI(QMainWindow):
-    """Interfaz gráfica principal con diseño glassmorphism"""
+    """Interfaz gráfica principal con diseño Material"""
     
     def __init__(self):
         super().__init__()
@@ -216,7 +382,7 @@ class AutoShutdownGUI(QMainWindow):
     def setup_ui(self):
         """Configura la interfaz de usuario"""
         self.setWindowTitle("Auto Shutdown")
-        self.setFixedSize(550, 850)  # Aún más grande
+        self.setFixedSize(480, 720)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
@@ -226,178 +392,170 @@ class AutoShutdownGUI(QMainWindow):
         
         # Layout principal
         layout = QVBoxLayout(main_widget)
-        layout.setContentsMargins(25, 25, 25, 25)
-        layout.setSpacing(25)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
         
-        # Contenedor principal con glassmorphism
-        self.glass_container = GlassWidget()
-        container_layout = QVBoxLayout(self.glass_container)
-        container_layout.setContentsMargins(35, 35, 35, 35)
-        container_layout.setSpacing(30)
+        # Contenedor principal con Material Card
+        self.card_container = MaterialCard()
+        container_layout = QVBoxLayout(self.card_container)
+        container_layout.setContentsMargins(30, 30, 30, 30)
+        container_layout.setSpacing(25)
+        
+        # Header con título y controles
+        header_layout = QHBoxLayout()
         
         # Título
         title = QLabel("Auto Shutdown")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("""
             QLabel {
-                color: white;
-                font-size: 28px;
+                color: #1a1a1a;
+                font-size: 24px;
+                font-weight: 700;
+                font-family: 'Segoe UI', Arial;
+                background: transparent;
+            }
+        """)
+        
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        # Botones de control
+        self.minimize_btn = QPushButton("−")
+        self.close_btn = QPushButton("×")
+        
+        control_style = """
+            QPushButton {
+                background: #f5f5f5;
+                border: none;
+                border-radius: 16px;
+                color: #666;
+                font-size: 16px;
                 font-weight: bold;
+                width: 32px;
+                height: 32px;
+            }
+            QPushButton:hover {
+                background: #e0e0e0;
+                color: #333;
+            }
+        """
+        
+        self.minimize_btn.setStyleSheet(control_style)
+        self.close_btn.setStyleSheet(control_style)
+        self.minimize_btn.clicked.connect(self.hide)
+        self.close_btn.clicked.connect(self.close)
+        
+        header_layout.addWidget(self.minimize_btn)
+        header_layout.addWidget(self.close_btn)
+        
+        # Subtítulo
+        subtitle = QLabel("Programación de apagado automático")
+        subtitle.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 14px;
+                font-family: 'Segoe UI', Arial;
                 background: transparent;
                 margin-bottom: 10px;
             }
         """)
         
-        # Subtítulo
-        subtitle = QLabel("Control de apagado automático")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setStyleSheet("""
+        # Indicador de estado
+        self.status_indicator = StatusIndicator()
+        
+        # Switch activar/desactivar estilo Material
+        switch_layout = QHBoxLayout()
+        switch_label = QLabel("Activar apagado automático")
+        switch_label.setStyleSheet("""
             QLabel {
-                color: rgba(255, 255, 255, 0.8);
-                font-size: 13px;
-                background: transparent;
-                margin-bottom: 15px;
+                color: #333;
+                font-size: 16px;
+                font-weight: 500;
+                font-family: 'Segoe UI', Arial;
             }
         """)
         
-        # Estado actual
-        self.status_label = QLabel("Cargando...")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("""
-            QLabel {
-                color: rgba(0, 255, 150, 0.9);
-                font-size: 14px;
-                font-weight: bold;
-                background: rgba(0, 255, 150, 0.1);
-                border: 1px solid rgba(0, 255, 150, 0.3);
-                border-radius: 8px;
-                padding: 10px;
-            }
-        """)
-        
-        # Checkbox activar/desactivar
-        self.enabled_checkbox = QCheckBox("Activar apagado automático")
+        self.enabled_checkbox = QCheckBox()
         self.enabled_checkbox.setChecked(True)
         self.enabled_checkbox.stateChanged.connect(self.on_enabled_changed)
         self.enabled_checkbox.setStyleSheet("""
-            QCheckBox {
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-                background: transparent;
-            }
             QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border-radius: 9px;
-                border: 2px solid rgba(255, 255, 255, 0.5);
-                background: rgba(255, 255, 255, 0.1);
+                width: 20px;
+                height: 20px;
+                border-radius: 3px;
+                border: 2px solid #ddd;
+                background: white;
             }
             QCheckBox::indicator:checked {
-                background: rgba(0, 255, 150, 0.8);
-                border: 2px solid rgba(0, 255, 150, 1);
+                background: #4CAF50;
+                border: 2px solid #4CAF50;
+                image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIiIGhlaWdodD0iOSIgdmlld0JveD0iMCAwIDEyIDkiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxwYXRoIGQ9Ik0xIDQuNUw0LjUgOEwxMSAxIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPgo8L3N2Zz4K);
+            }
+            QCheckBox::indicator:hover {
+                border: 2px solid #4CAF50;
             }
         """)
+        
+        switch_layout.addWidget(switch_label)
+        switch_layout.addStretch()
+        switch_layout.addWidget(self.enabled_checkbox)
         
         # Selector de hora
-        time_frame = QFrame()
-        time_frame.setStyleSheet("background: transparent;")
-        time_layout = QVBoxLayout(time_frame)
-        
-        time_label = QLabel("Hora de apagado:")
+        time_section = QVBoxLayout()
+        time_label = QLabel("Hora de apagado")
         time_label.setStyleSheet("""
             QLabel {
-                color: white;
-                font-size: 14px;
-                font-weight: bold;
-                background: transparent;
+                color: #333;
+                font-size: 16px;
+                font-weight: 500;
+                font-family: 'Segoe UI', Arial;
+                margin-bottom: 8px;
             }
         """)
         
-        self.time_edit = QTimeEdit()
-        self.time_edit.setTime(QTime(20, 0))  # 8:00 PM por defecto
-        self.time_edit.setDisplayFormat("hh:mm")
+        self.time_edit = MaterialTimeEdit()
         self.time_edit.timeChanged.connect(self.on_time_changed)
-        # Hacer el QTimeEdit editable con teclado y mouse
-        self.time_edit.setReadOnly(False)
-        self.time_edit.setButtonSymbols(QTimeEdit.ButtonSymbols.UpDownArrows)
-        self.time_edit.setStyleSheet("""
-            QTimeEdit {
-                background: rgba(255, 255, 255, 0.15);
-                border: 2px solid rgba(255, 255, 255, 0.4);
-                border-radius: 12px;
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                padding: 15px;
-                text-align: center;
-                selection-background-color: rgba(0, 255, 150, 0.3);
-            }
-            QTimeEdit:focus {
-                border: 2px solid rgba(0, 255, 150, 0.8);
-                background: rgba(255, 255, 255, 0.2);
-            }
-            QTimeEdit::up-button {
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                width: 20px;
-                margin-right: 5px;
-            }
-            QTimeEdit::down-button {
-                background: rgba(255, 255, 255, 0.2);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 4px;
-                width: 20px;
-                margin-right: 5px;
-            }
-            QTimeEdit::up-button:hover, QTimeEdit::down-button:hover {
-                background: rgba(255, 255, 255, 0.3);
-            }
-        """)
         
-        time_layout.addWidget(time_label)
-        time_layout.addWidget(self.time_edit)
+        time_section.addWidget(time_label)
+        time_section.addWidget(self.time_edit)
         
-        # Botones de acción
-        buttons_frame = QFrame()
-        buttons_frame.setStyleSheet("background: transparent;")
-        buttons_layout = QVBoxLayout(buttons_frame)
-        buttons_layout.setSpacing(15)
+        # Botones de acción con estilo Material
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setSpacing(12)
         
         # Botón postponer
-        self.postpone_btn = QPushButton("🕐 Postponer 2 horas")
+        self.postpone_btn = QPushButton("🕐  Postponer 2 horas")
         self.postpone_btn.clicked.connect(self.postpone_shutdown)
         
         # Botón saltar hoy
-        self.skip_btn = QPushButton("⏭️ Saltar hoy")
+        self.skip_btn = QPushButton("⏭️  Saltar hoy")
         self.skip_btn.clicked.connect(self.skip_today)
         
         # Botón cancelar apagado
-        self.cancel_btn = QPushButton("❌ Cancelar apagado")
+        self.cancel_btn = QPushButton("❌  Cancelar apagado")
         self.cancel_btn.clicked.connect(self.cancel_shutdown)
         
-        # Estilo para botones - MÁS GRANDES
+        # Estilo Material para botones
         button_style = """
             QPushButton {
-                background: rgba(255, 255, 255, 0.15);
-                border: 2px solid rgba(255, 255, 255, 0.4);
-                border-radius: 15px;
-                color: white;
+                background: white;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                color: #333;
                 font-size: 14px;
-                font-weight: bold;
-                padding: 20px 25px;
+                font-weight: 500;
+                font-family: 'Segoe UI', Arial;
+                padding: 16px 20px;
                 text-align: left;
-                min-height: 30px;
+                min-height: 20px;
             }
             QPushButton:hover {
-                background: rgba(255, 255, 255, 0.25);
-                border: 2px solid rgba(255, 255, 255, 0.6);
-                transform: translateY(-1px);
+                background: #f8f9fa;
+                border: 1px solid #4CAF50;
+                color: #4CAF50;
             }
             QPushButton:pressed {
-                background: rgba(255, 255, 255, 0.35);
-                transform: translateY(1px);
+                background: #e8f5e8;
             }
         """
         
@@ -409,63 +567,29 @@ class AutoShutdownGUI(QMainWindow):
         buttons_layout.addWidget(self.skip_btn)
         buttons_layout.addWidget(self.cancel_btn)
         
-        # Botón minimizar/cerrar
-        controls_frame = QFrame()
-        controls_frame.setStyleSheet("background: transparent;")
-        controls_layout = QHBoxLayout(controls_frame)
-        controls_layout.addStretch()
-        
-        self.minimize_btn = QPushButton("🗕")
-        self.close_btn = QPushButton("✕")
-        
-        control_style = """
-            QPushButton {
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.3);
-                border-radius: 15px;
-                color: white;
-                font-size: 12px;
-                font-weight: bold;
-                width: 30px;
-                height: 30px;
-            }
-            QPushButton:hover {
-                background: rgba(255, 255, 255, 0.2);
-            }
-        """
-        
-        self.minimize_btn.setStyleSheet(control_style)
-        self.close_btn.setStyleSheet(control_style)
-        self.minimize_btn.clicked.connect(self.hide)
-        self.close_btn.clicked.connect(self.close)
-        
-        controls_layout.addWidget(self.minimize_btn)
-        controls_layout.addWidget(self.close_btn)
-        
         # Agregar todo al contenedor
-        container_layout.addWidget(title)
+        container_layout.addLayout(header_layout)
         container_layout.addWidget(subtitle)
-        container_layout.addWidget(self.status_label)
-        container_layout.addWidget(self.enabled_checkbox)
-        container_layout.addWidget(time_frame)
-        container_layout.addWidget(buttons_frame)
+        container_layout.addWidget(self.status_indicator)
+        container_layout.addLayout(switch_layout)
+        container_layout.addLayout(time_section)
+        container_layout.addLayout(buttons_layout)
         container_layout.addStretch()
-        container_layout.addWidget(controls_frame)
         
-        layout.addWidget(self.glass_container)
+        layout.addWidget(self.card_container)
         
-        # Fondo con gradiente
+        # Fondo con gradiente Material
         self.setStyleSheet("""
             QMainWindow {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 rgba(30, 60, 114, 0.8),
-                    stop:0.5 rgba(42, 82, 152, 0.8),
-                    stop:1 rgba(20, 40, 80, 0.8));
+                    stop:0 rgba(100, 181, 246, 0.1),
+                    stop:0.5 rgba(129, 199, 132, 0.1),
+                    stop:1 rgba(174, 213, 129, 0.1));
             }
         """)
         
     def setup_tray(self):
-        """Configura el icono en la bandeja del sistema"""
+        """Configura el icono en la bandeja del sistema (SIN CAMBIOS)"""
         self.tray_icon = QSystemTrayIcon(self)
         
         # Crear un icono simple usando texto
@@ -536,12 +660,27 @@ class AutoShutdownGUI(QMainWindow):
         """Carga la configuración guardada"""
         config = self.service.load_config()
         
+        # Actualizar checkbox y estado visual INMEDIATAMENTE
         self.enabled_checkbox.setChecked(config["enabled"])
         
         time_parts = config["shutdown_time"].split(":")
         hour = int(time_parts[0])
         minute = int(time_parts[1])
         self.time_edit.setTime(QTime(hour, minute))
+        
+        # Actualizar indicador visual inmediatamente
+        self.update_status_display(config)
+        
+    def update_status_display(self, config=None):
+        """Actualiza el display de estado inmediatamente"""
+        if not config:
+            config = self.service.load_config()
+        
+        is_active = config["enabled"]
+        status_text = "Activo" if is_active else "Desactivado"
+        time_text = config["shutdown_time"]
+        
+        self.status_indicator.set_status(is_active, status_text, time_text)
         
     def start_service(self):
         """Inicia el servicio de apagado"""
@@ -551,8 +690,6 @@ class AutoShutdownGUI(QMainWindow):
         
     def update_status(self, status):
         """Actualiza el estado mostrado"""
-        self.status_label.setText(status)
-        
         # Actualizar también el menú del tray
         if hasattr(self, 'tray_status_action'):
             self.tray_status_action.setText(f"Estado: {status}")
@@ -568,16 +705,22 @@ class AutoShutdownGUI(QMainWindow):
                           "Haz clic en 'Cancelar apagado' si quieres detenerlo.")
         
     def on_enabled_changed(self, state):
-        """Cuando se cambia el estado activado/desactivado"""
+        """Cuando se cambia el estado activado/desactivado - CAMBIO INSTANTÁNEO"""
         config = self.service.load_config()
         config["enabled"] = self.enabled_checkbox.isChecked()
         self.service.save_config(config)
         
+        # ACTUALIZAR VISUAL INMEDIATAMENTE
+        self.update_status_display(config)
+        
     def on_time_changed(self, time):
-        """Cuando se cambia la hora"""
+        """Cuando se cambia la hora - ACTUALIZACIÓN INSTANTÁNEA"""
         config = self.service.load_config()
         config["shutdown_time"] = time.toString("hh:mm")
         self.service.save_config(config)
+        
+        # ACTUALIZAR VISUAL INMEDIATAMENTE
+        self.update_status_display(config)
         
     def postpone_shutdown(self):
         """Postpone el apagado 2 horas"""
