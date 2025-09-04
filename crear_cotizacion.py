@@ -17,7 +17,10 @@ DATOS_SUPABASE_PRUEBA = [
     {"id": 4, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "AMORTIGUADOR DELANTERO"},
     {"id": 5, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "BRIDAS"},
     {"id": 6, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "GOMA DE REBOTE CON CUBRE POLVO"},
-    {"id": 7, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "ROTULA SUPERIOR CON AMORTIGUADOR DELANTERO Y GOMAS DE REBOTE"}
+    {"id": 7, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "ROTULA SUPERIOR CON AMORTIGUADOR DELANTERO Y GOMAS DE REBOTE"},
+    {"id": 8, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "BALATAS"},
+    {"id": 9, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "BALATA"}
+    
 
 ]
 
@@ -195,6 +198,93 @@ def buscar_articulo_por_descripcion(descripcion):
             
             print(f"    -> ✅ MEJOR MATCH: {mejor['datos'][0]} - '{mejor['desc_bd']}' (puntuación: {mejor['puntuacion']:.3f})")
             return mejor['datos']
+        
+        # === PASO 2.5: BÚSQUEDA FUZZY (DISTANCIA DE LEVENSHTEIN) ===
+        print("    -> Sin coincidencias inversas, probando búsqueda fuzzy...")
+        
+        def levenshtein_distance(s1, s2):
+            """Calcula la distancia de Levenshtein entre dos strings."""
+            if len(s1) < len(s2):
+                return levenshtein_distance(s2, s1)
+            
+            if len(s2) == 0:
+                return len(s1)
+            
+            previous_row = range(len(s2) + 1)
+            for i, c1 in enumerate(s1):
+                current_row = [i + 1]
+                for j, c2 in enumerate(s2):
+                    insertions = previous_row[j + 1] + 1
+                    deletions = current_row[j] + 1
+                    substitutions = previous_row[j] + (c1 != c2)
+                    current_row.append(min(insertions, deletions, substitutions))
+                previous_row = current_row
+            
+            return previous_row[-1]
+        
+        candidatos_fuzzy = []
+        max_distancia = 2  # Permitir máximo 2 caracteres de diferencia
+        
+        # Buscar en Servicios con fuzzy matching
+        cursor.execute("""
+            SELECT Cve, Descripcion, Precio, 'Servicios' as Tabla
+            FROM Servicios 
+            WHERE LEN(LTRIM(RTRIM(Descripcion))) >= 3
+        """)
+        
+        servicios = cursor.fetchall()
+        for servicio in servicios:
+            desc_bd = servicio[1].upper().strip()
+            distancia = levenshtein_distance(descripcion_upper, desc_bd)
+            
+            if distancia <= max_distancia and distancia > 0:  # Excluir coincidencias exactas (ya revisadas)
+                # Puntuación basada en similitud (menor distancia = mayor puntuación)
+                max_len = max(len(descripcion_upper), len(desc_bd))
+                similitud = (max_len - distancia) / max_len
+                puntuacion = similitud * 0.8 + (len(desc_bd) * 0.01)  # Bonus por longitud
+                
+                candidatos_fuzzy.append({
+                    'datos': servicio,
+                    'puntuacion': puntuacion,
+                    'distancia': distancia,
+                    'desc_bd': desc_bd
+                })
+                print(f"    -> Candidato Fuzzy Servicios: {servicio[0]} - '{desc_bd}' (distancia: {distancia}, puntuación: {puntuacion:.3f})")
+        
+        # Buscar en Inventario con fuzzy matching
+        cursor.execute("""
+            SELECT Clave, Descripcion, PVenta, 'Inventario' as Tabla
+            FROM [dbo].[Inventario]
+            WHERE LEN(LTRIM(RTRIM(Descripcion))) >= 3
+        """)
+        
+        inventario = cursor.fetchall()
+        for item in inventario:
+            desc_bd = item[1].upper().strip()
+            distancia = levenshtein_distance(descripcion_upper, desc_bd)
+            
+            if distancia <= max_distancia and distancia > 0:  # Excluir coincidencias exactas (ya revisadas)
+                # Puntuación basada en similitud (menor distancia = mayor puntuación)
+                max_len = max(len(descripcion_upper), len(desc_bd))
+                similitud = (max_len - distancia) / max_len
+                puntuacion = similitud * 0.8 + (len(desc_bd) * 0.01)  # Bonus por longitud
+                
+                candidatos_fuzzy.append({
+                    'datos': item,
+                    'puntuacion': puntuacion,
+                    'distancia': distancia,
+                    'desc_bd': desc_bd
+                })
+                print(f"    -> Candidato Fuzzy Inventario: {item[0]} - '{desc_bd}' (distancia: {distancia}, puntuación: {puntuacion:.3f})")
+        
+        # Seleccionar el mejor candidato fuzzy
+        if candidatos_fuzzy:
+            # Ordenar por menor distancia primero, luego por mayor puntuación
+            candidatos_fuzzy.sort(key=lambda x: (x['distancia'], -x['puntuacion']))
+            mejor_fuzzy = candidatos_fuzzy[0]
+            
+            print(f"    -> ✅ MEJOR MATCH FUZZY: {mejor_fuzzy['datos'][0]} - '{mejor_fuzzy['desc_bd']}' (distancia: {mejor_fuzzy['distancia']}, puntuación: {mejor_fuzzy['puntuacion']:.3f})")
+            return mejor_fuzzy['datos']
         
         # === PASO 4: BÚSQUEDA PARCIAL TRADICIONAL (FALLBACK) ===
         print("    -> Sin coincidencias inversas, probando búsqueda parcial tradicional...")
