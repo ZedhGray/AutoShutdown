@@ -17,7 +17,7 @@ DATOS_SUPABASE_PRUEBA = [
     {"id": 4, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "AMORTIGUADOR DELANTERO"},
     {"id": 5, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "BRIDAS"},
     {"id": 6, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "GOMA DE REBOTE CON CUBRE POLVO"},
-    {"id": 7, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Garcia", "descripcion": ""}
+    {"id": 7, "importe": "1000.00", "pcompra": "", "cantidad": "1", "unitario": "1000", "proveedor": "Bustos", "descripcion": "ROTULA SUPERIOR CON AMORTIGUADOR DELANTERO Y GOMAS DE REBOTE"}
 
 ]
 
@@ -90,7 +90,11 @@ def buscar_articulo_por_clave(clave):
 def buscar_articulo_por_descripcion(descripcion):
     """
     Busca un artículo en las tablas Servicios e Inventario por descripción.
-    Primero busca coincidencia exacta, luego parcial con LIKE.
+    Estrategia de búsqueda:
+    1. Coincidencia exacta
+    2. Búsqueda inversa: si alguna descripción de BD está contenida en el texto de Supabase
+    3. Sistema de puntuación para elegir la mejor coincidencia
+    
     Devuelve (clave, descripcion_encontrada, precio, tabla_origen) o None si no encuentra.
     """
     conn = get_db_connection(SQL_SERVER_GARCIA, DATABASE, USERNAME, PASSWORD)
@@ -128,8 +132,74 @@ def buscar_articulo_por_descripcion(descripcion):
             print(f"    -> Encontrado exacto en Inventario: {result[0]} - {result[1]}")
             return result
         
-        # === PASO 2: BÚSQUEDA PARCIAL CON LIKE ===
-        # Buscar en Servicios - coincidencia parcial
+        # === PASO 2: BÚSQUEDA INVERSA CON SISTEMA DE PUNTUACIÓN ===
+        print("    -> Búsqueda exacta sin resultados, iniciando búsqueda inteligente...")
+        
+        candidatos = []
+        
+        # Buscar en Servicios - descripción de BD contenida en texto de Supabase
+        cursor.execute("""
+            SELECT Cve, Descripcion, Precio, 'Servicios' as Tabla
+            FROM Servicios 
+            WHERE LEN(LTRIM(RTRIM(Descripcion))) >= 3
+        """)
+        
+        servicios = cursor.fetchall()
+        for servicio in servicios:
+            desc_bd = servicio[1].upper().strip()
+            if desc_bd in descripcion_upper:
+                # Calcular puntuación
+                longitud_match = len(desc_bd)
+                precision = longitud_match / len(descripcion_upper)
+                cobertura = longitud_match / len(desc_bd)
+                puntuacion = (precision * 0.3) + (cobertura * 0.7) + (longitud_match * 0.01)
+                
+                candidatos.append({
+                    'datos': servicio,
+                    'puntuacion': puntuacion,
+                    'longitud_match': longitud_match,
+                    'desc_bd': desc_bd
+                })
+                print(f"    -> Candidato Servicios: {servicio[0]} - '{desc_bd}' (puntuación: {puntuacion:.3f})")
+        
+        # Buscar en Inventario - descripción de BD contenida en texto de Supabase
+        cursor.execute("""
+            SELECT Clave, Descripcion, PVenta, 'Inventario' as Tabla
+            FROM [dbo].[Inventario]
+            WHERE LEN(LTRIM(RTRIM(Descripcion))) >= 3
+        """)
+        
+        inventario = cursor.fetchall()
+        for item in inventario:
+            desc_bd = item[1].upper().strip()
+            if desc_bd in descripcion_upper:
+                # Calcular puntuación
+                longitud_match = len(desc_bd)
+                precision = longitud_match / len(descripcion_upper)
+                cobertura = longitud_match / len(desc_bd)
+                puntuacion = (precision * 0.3) + (cobertura * 0.7) + (longitud_match * 0.01)
+                
+                candidatos.append({
+                    'datos': item,
+                    'puntuacion': puntuacion,
+                    'longitud_match': longitud_match,
+                    'desc_bd': desc_bd
+                })
+                print(f"    -> Candidato Inventario: {item[0]} - '{desc_bd}' (puntuación: {puntuacion:.3f})")
+        
+        # === PASO 3: SELECCIONAR EL MEJOR CANDIDATO ===
+        if candidatos:
+            # Ordenar por puntuación descendente, luego por longitud de match descendente
+            candidatos.sort(key=lambda x: (-x['puntuacion'], -x['longitud_match']))
+            mejor = candidatos[0]
+            
+            print(f"    -> ✅ MEJOR MATCH: {mejor['datos'][0]} - '{mejor['desc_bd']}' (puntuación: {mejor['puntuacion']:.3f})")
+            return mejor['datos']
+        
+        # === PASO 4: BÚSQUEDA PARCIAL TRADICIONAL (FALLBACK) ===
+        print("    -> Sin coincidencias inversas, probando búsqueda parcial tradicional...")
+        
+        # Buscar en Servicios - coincidencia parcial tradicional
         cursor.execute("""
             SELECT Cve, Descripcion, Precio, 'Servicios' as Tabla
             FROM Servicios 
@@ -142,7 +212,7 @@ def buscar_articulo_por_descripcion(descripcion):
             print(f"    -> Encontrado parcial en Servicios: {result[0]} - {result[1]}")
             return result
         
-        # Buscar en Inventario - coincidencia parcial
+        # Buscar en Inventario - coincidencia parcial tradicional
         cursor.execute("""
             SELECT Clave, Descripcion, PVenta, 'Inventario' as Tabla
             FROM [dbo].[Inventario]
@@ -154,8 +224,8 @@ def buscar_articulo_por_descripcion(descripcion):
         if result:
             print(f"    -> Encontrado parcial en Inventario: {result[0]} - {result[1]}")
             return result
-            
-        print(f"    -> No encontrado en BD")
+        
+        print(f"    -> ❌ No encontrado en BD")
         return None
         
     except Exception as e:
