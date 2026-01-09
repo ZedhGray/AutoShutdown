@@ -114,15 +114,25 @@ auto-shutdown/
 
 ## 📝 Licencia
 
-[Especifica tu licencia aquí]
+Este proyecto es de mi propiedad intelectual, pero es de código abierto.
 
-## 🤝 Contribuciones
+Puedes:
 
-[Información sobre cómo contribuir]
+- ✅ Usar el programa libremente
+- ✅ Modificar el código fuente
+- ✅ Distribuir copias
+- ✅ Usarlo para proyectos personales o comerciales
+
+Solo pido que:
+
+- 📌 Mantengas los créditos originales
+- 📌 No te hagas pasar por el autor original
 
 ## 📧 Contacto
 
-[Tu información de contacto]
+Para dudas, sugerencias o reportar problemas:
+
+- Email: zohanshane@gmail.com
 
 ---
 
